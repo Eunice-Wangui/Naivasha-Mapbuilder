@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Naivasha Watershed — Restoration MapBuilder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; width: 100%; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  #header {
+    background: linear-gradient(135deg, #0d3b2e 0%, #1a5c42 100%);
+    padding: 10px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 2px solid #2ecc71;
+    flex-shrink: 0;
+  }
+  #header h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+  #header .subtitle { font-size: 11px; color: #a8d5b5; margin-top: 2px; }
+  #header .wri-badge {
+    background: #2ecc71; color: #0d3b2e; padding: 4px 10px;
+    border-radius: 12px; font-size: 11px; font-weight: 700;
+  }
+
+  #main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+  #map { flex: 1; min-height: 0; width: 100%; position: relative; }
+
+  #sidebar {
+    width: 300px; background: #12122a; overflow-y: auto;
+    border-left: 1px solid #2a2a4a; flex-shrink: 0;
+    display: flex; flex-direction: column;
+  }
+
+  .panel-section {
+    border-bottom: 1px solid #2a2a4a; padding: 14px;
+  }
+  .panel-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1px; color: #2ecc71; margin-bottom: 10px;
+  }
+
+  .layer-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; cursor: pointer; border-radius: 4px;
+    font-size: 12px; color: #ccc;
+  }
+  .layer-item:hover { color: #fff; }
+  .layer-item input[type=checkbox] { accent-color: #2ecc71; width: 14px; height: 14px; cursor: pointer; }
+  .layer-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+  .legend-grid { display: flex; flex-direction: column; gap: 5px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #bbb; }
+  .legend-swatch { width: 16px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-box {
+    background: #1e1e3a; border-radius: 6px; padding: 8px;
+    text-align: center; border: 1px solid #2a2a4a;
+  }
+  .stat-value { font-size: 18px; font-weight: 700; color: #2ecc71; }
+  .stat-label { font-size: 10px; color: #888; margin-top: 2px; }
+
+  #info-panel {
+    background: #0d1a0f; border-top: 2px solid #2ecc71;
+    padding: 12px 14px; flex-shrink: 0;
+  }
+  #info-panel h3 { font-size: 12px; color: #2ecc71; margin-bottom: 6px; font-weight: 700; }
+  #info-content { font-size: 11px; color: #aaa; line-height: 1.6; }
+  .info-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #1a2a1a; }
+  .info-label { color: #888; }
+  .info-value { color: #fff; font-weight: 600; }
+  .info-value.warn { color: #f39c12; }
+  .info-value.danger { color: #e74c3c; }
+  .info-value.good { color: #2ecc71; }
+  .priority-badge {
+    display: inline-block; background: #e74c3c; color: #fff;
+    padding: 2px 8px; border-radius: 10px; font-size: 10px;
+    font-weight: 700; margin-left: 6px;
+  }
+  .priority-badge.high { background: #f39c12; }
+  .priority-badge.moderate { background: #3498db; }
+  .priority-badge.low { background: #666; }
+
+  .placeholder-notice {
+    background: #1a2a1a; border: 1px dashed #2ecc71;
+    border-radius: 6px; padding: 8px; font-size: 10px;
+    color: #888; margin-top: 8px; line-height: 1.5;
+  }
+
+  /* Leaflet popup */
+  .leaflet-popup-content-wrapper {
+    background: #12122a; border: 1px solid #2ecc71;
+    border-radius: 8px; color: #eee;
+  }
+  .leaflet-popup-tip { background: #12122a; }
+  .leaflet-popup-content { font-size: 12px; margin: 10px 14px; min-width: 200px; }
+
+  .intervention-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; margin-bottom: 6px;
+  }
+  .tag-forest { background: #1a5c42; color: #2ecc71; }
+  .tag-rangeland { background: #5c4a1a; color: #f39c12; }
+  .tag-agro { background: #3a1a5c; color: #a78bfa; }
+  .tag-riparian { background: #1a3a5c; color: #60a5fa; }
+
+  #basemap-toggle {
+    position: absolute; top: 10px; right: 310px; z-index: 1000;
+    background: #12122a; border: 1px solid #2a2a4a;
+    border-radius: 6px; overflow: hidden; display: flex;
+  }
+  .bm-btn {
+    padding: 6px 12px; font-size: 11px; cursor: pointer;
+    color: #aaa; border: none; background: transparent;
+  }
+  .bm-btn.active { background: #2ecc71; color: #0d3b2e; font-weight: 700; }
+
+  .ha-summary {
+    background: #1e1e3a; border-radius: 6px; padding: 10px;
+    margin-top: 8px; border: 1px solid #2a2a4a;
+  }
+  .ha-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 11px; }
+  .ha-label { color: #bbb; display: flex; align-items: center; gap: 6px; }
+  .ha-value { color: #fff; font-weight: 700; }
+  .ha-bar { height: 4px; border-radius: 2px; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <div class="subtitle">WRI Kenya · SWAT+ Rev.61.0.2 · 2016–2025 Baseline</div>
+    <h1>Lake Naivasha Watershed — Restoration MapBuilder</h1>
+  </div>
+  <div class="wri-badge">WRI · Naivasha</div>
+</div>
+
+<div id="main">
+  <div id="map"></div>
+
+  <div id="sidebar">
+
+    <!-- LAYER TOGGLES -->
+    <div class="panel-section">
+      <div class="panel-title">Layers</div>
+      <label class="layer-item">
+        <input type="checkbox" id="toggle-subbasins" checked>
+        <span class="layer-swatch" style="background:#2ecc7155;border:2px solid #2ecc71"></span>
+        47 Subbasins
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="toggle-priority" checked>
+        <span class="layer-swatch" style="background:#e74c3c55;border:2px solid #e74c3c"></span>
+        Priority Subbasins (9)
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="toggle-watershed" checked>
+        <span class="layer-swatch" style="background:transparent;border:2px solid #fff"></span>
+        Watershed Boundary
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="toggle-hotspots">
+        <span class="layer-swatch" style="background:#f39c1255;border:2px solid #f39c12"></span>
+        Restoration Hotspots
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="toggle-cluster">
+        <span class="layer-swatch" style="background:#60a5fa55;border:2px solid #60a5fa"></span>
+        Aberdare-Malewa Cluster (GRV)
+      </label>
+      <label class="layer-item" style="opacity:0.5" title="Awaiting Elias">
+        <input type="checkbox" disabled>
+        <span class="layer-swatch" style="background:#a78bfa55;border:2px dashed #a78bfa"></span>
+        TerraFund C1/C2/C3 <em style="font-size:10px">(pending)</em>
+      </label>
+      <label class="layer-item" style="opacity:0.5" title="Awaiting Elias">
+        <input type="checkbox" disabled>
+        <span class="layer-swatch" style="background:#fb923c55;border:2px dashed #fb923c"></span>
+        Protected Areas <em style="font-size:10px">(pending)</em>
+      </label>
+    </div>
+
+    <!-- COLOUR MODE -->
+    <div class="panel-section">
+      <div class="panel-title">Colour By</div>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="intervention" checked> Intervention Type
+      </label>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="sediment"> Sediment Yield
+      </label>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="priority"> Priority Score
+      </label>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="runoff"> Surface Runoff
+      </label>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="baseflow"> Baseflow (% of Flow)
+      </label>
+      <label class="layer-item">
+        <input type="radio" name="colourmode" value="et"> ET Deficit (% of Precip)
+      </label>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="panel-section" id="legend-panel">
+      <div class="panel-title">Legend</div>
+      <div class="legend-grid" id="legend-content"></div>
+    </div>
+
+    <!-- HA SUMMARY -->
+    <div class="panel-section">
+      <div class="panel-title">Intervention Area Totals</div>
+      <div class="ha-summary">
+        <div class="ha-row">
+          <span class="ha-label"><span style="width:10px;height:10px;background:#2ecc71;border-radius:2px;display:inline-block"></span>Forest Restoration</span>
+          <span class="ha-value">13,065 ha</span>
+        </div>
+        <div class="ha-bar" style="background:#2ecc71;width:9.4%"></div>
+        <div class="ha-row" style="margin-top:4px">
+          <span class="ha-label"><span style="width:10px;height:10px;background:#f39c12;border-radius:2px;display:inline-block"></span>Grass Rehab / Rotational Grazing / Contour Farming</span>
+          <span class="ha-value">100,491 ha</span>
+        </div>
+        <div class="ha-bar" style="background:#f39c12;width:72.2%"></div>
+        <div class="ha-row" style="margin-top:4px">
+          <span class="ha-label"><span style="width:10px;height:10px;background:#a78bfa;border-radius:2px;display:inline-block"></span>Agroforestry</span>
+          <span class="ha-value">~10,000 ha</span>
+        </div>
+        <div class="ha-bar" style="background:#a78bfa;width:7.2%"></div>
+        <div class="ha-row" style="margin-top:4px">
+          <span class="ha-label"><span style="width:10px;height:10px;background:#60a5fa;border-radius:2px;display:inline-block"></span>Riparian Restoration</span>
+          <span class="ha-value">~20,000 ha*</span>
+        </div>
+        <div class="ha-bar" style="background:#60a5fa;width:14.4%"></div>
+        <div style="font-size:9px;color:#666;margin-top:6px">*Riparian corridors are subsets within above categories, not additional ha. Total watershed: 139,215 ha.</div>
+      </div>
+    </div>
+
+    <!-- WATERSHED STATS -->
+    <div class="panel-section">
+      <div class="panel-title">Watershed Indicators (2016–2025 Avg)</div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value" style="color:#e74c3c">467mm</div>
+          <div class="stat-label">Surface Runoff<br><span style="color:#e74c3c">82% streamflow</span></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:#f39c12">632mm</div>
+          <div class="stat-label">Evapotranspiration<br><span style="color:#f39c12">52% rainfall</span></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:#e74c3c">8.3</div>
+          <div class="stat-label">Sediment Avg<br><span style="color:#888">Mg/ha/yr</span></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:#e74c3c">82mm</div>
+          <div class="stat-label">Baseflow<br><span style="color:#e74c3c">14% streamflow</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBBASIN INFO -->
+    <div id="info-panel">
+      <h3>Subbasin Details</h3>
+      <div id="info-content" style="color:#666;font-style:italic">Click a subbasin to view details</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="basemap-toggle">
+  <button class="bm-btn active" id="bm-osm" onclick="setBasemap('osm')">Streets</button>
+  <button class="bm-btn" id="bm-sat" onclick="setBasemap('sat')">Satellite</button>
+</div>
+
+<script>
+// ============================================================
+// SUBBASIN DATA — from Indicators_Subbasin.csv &
+// Restoration_Priority_Subbasins.csv
+// ============================================================
+const SUBBASIN_DATA = {
+  1:  {surq:114.11,et:69.61,bf:0.0,  sed:0.38, sed_max:1.33,  priority_score:4.04, priority_label:"MODERATE"},
+  2:  {surq:179.81,et:46.94,bf:2.62, sed:2.12, sed_max:3.34,  priority_score:4.87, priority_label:"MODERATE"},
+  3:  {surq:255.02,et:37.72,bf:0.0,  sed:5.08, sed_max:6.25,  priority_score:5.86, priority_label:"HIGH"},
+  4:  {surq:244.4, et:37.97,bf:3.93, sed:8.13, sed_max:10.51, priority_score:5.59, priority_label:"HIGH"},
+  5:  {surq:287.92,et:54.1, bf:0.0,  sed:11.99,sed_max:29.44, priority_score:5.77, priority_label:"HIGH"},
+  6:  {surq:360.18,et:48.95,bf:4.13, sed:4.18, sed_max:8.03,  priority_score:5.33, priority_label:"MODERATE"},
+  7:  {surq:3.19,  et:57.7, bf:0.0,  sed:0.35, sed_max:0.38,  priority_score:4.11, priority_label:"MODERATE"},
+  8:  {surq:185.51,et:41.77,bf:0.0,  sed:4.21, sed_max:10.1,  priority_score:5.45, priority_label:"MODERATE"},
+  9:  {surq:76.27, et:49.8, bf:13.7, sed:1.12, sed_max:4.69,  priority_score:3.26, priority_label:"LOW"},
+  10: {surq:237.61,et:40.4, bf:0.0,  sed:1.08, sed_max:1.08,  priority_score:5.49, priority_label:"MODERATE"},
+  11: {surq:414.76,et:43.34,bf:1.38, sed:7.6,  sed_max:30.16, priority_score:6.17, priority_label:"HIGH"},
+  12: {surq:481.36,et:41.72,bf:2.88, sed:3.02, sed_max:7.04,  priority_score:6.03, priority_label:"HIGH"},
+  13: {surq:481.25,et:42.97,bf:0.0,  sed:26.05,sed_max:72.09, priority_score:7.55, priority_label:"CRITICAL"},
+  14: {surq:613.33,et:33.35,bf:0.51, sed:19.73,sed_max:110.35,priority_score:7.90, priority_label:"CRITICAL"},
+  15: {surq:341.33,et:56.94,bf:12.1, sed:9.07, sed_max:21.21, priority_score:4.45, priority_label:"MODERATE"},
+  16: {surq:624.83,et:36.9, bf:1.99, sed:20.88,sed_max:38.0,  priority_score:7.72, priority_label:"CRITICAL"},
+  17: {surq:500.75,et:57.2, bf:2.07, sed:4.54, sed_max:13.41, priority_score:5.71, priority_label:"HIGH"},
+  18: {surq:586.3, et:38.59,bf:1.27, sed:8.11, sed_max:15.68, priority_score:6.91, priority_label:"HIGH"},
+  19: {surq:559.83,et:40.06,bf:2.3,  sed:8.53, sed_max:24.13, priority_score:6.70, priority_label:"HIGH"},
+  20: {surq:572.11,et:32.9, bf:0.0,  sed:18.04,sed_max:18.04, priority_score:7.74, priority_label:"CRITICAL"},
+  21: {surq:549.99,et:38.1, bf:2.52, sed:37.32,sed_max:132.99,priority_score:8.30, priority_label:"CRITICAL"},
+  22: {surq:509.34,et:35.8, bf:0.0,  sed:8.06, sed_max:8.06,  priority_score:6.89, priority_label:"HIGH"},
+  23: {surq:647.22,et:36.04,bf:2.15, sed:8.55, sed_max:20.82, priority_score:7.13, priority_label:"HIGH"},
+  24: {surq:566.44,et:31.8, bf:24.6, sed:45.36,sed_max:45.36, priority_score:6.77, priority_label:"HIGH"},
+  25: {surq:566.24,et:43.5, bf:0.0,  sed:14.18,sed_max:80.25, priority_score:7.14, priority_label:"HIGH"},
+  26: {surq:485.18,et:45.37,bf:3.61, sed:11.45,sed_max:22.05, priority_score:6.30, priority_label:"HIGH"},
+  27: {surq:94.51, et:86.7, bf:0.0,  sed:7.96, sed_max:11.32, priority_score:3.79, priority_label:"MODERATE"},
+  28: {surq:660.3, et:40.39,bf:0.78, sed:5.51, sed_max:7.75,  priority_score:6.99, priority_label:"HIGH"},
+  29: {surq:724.05,et:45.44,bf:1.09, sed:7.68, sed_max:21.61, priority_score:7.10, priority_label:"HIGH"},
+  30: {surq:734.86,et:50.38,bf:1.6,  sed:4.53, sed_max:8.99,  priority_score:6.73, priority_label:"HIGH"},
+  31: {surq:798.17,et:35.69,bf:2.16, sed:33.09,sed_max:58.72, priority_score:8.97, priority_label:"CRITICAL"},
+  32: {surq:466.41,et:67.6, bf:3.31, sed:19.68,sed_max:53.94, priority_score:5.94, priority_label:"HIGH"},
+  33: {surq:624.78,et:50.17,bf:0.0,  sed:8.69, sed_max:12.61, priority_score:6.79, priority_label:"HIGH"},
+  34: {surq:787.39,et:43.18,bf:0.75, sed:11.57,sed_max:33.18, priority_score:7.63, priority_label:"CRITICAL"},
+  35: {surq:745.51,et:78.84,bf:1.02, sed:2.69, sed_max:19.94, priority_score:5.72, priority_label:"HIGH"},
+  36: {surq:311.27,et:79.33,bf:2.33, sed:15.36,sed_max:24.67, priority_score:4.90, priority_label:"MODERATE"},
+  37: {surq:770.61,et:102.7,bf:0.0,  sed:0.0,  sed_max:0.0,   priority_score:4.91, priority_label:"MODERATE"},
+  38: {surq:339.63,et:90.16,bf:1.76, sed:16.44,sed_max:26.64, priority_score:4.73, priority_label:"MODERATE"},
+  39: {surq:770.33,et:102.7,bf:0.0,  sed:0.0,  sed_max:0.0,   priority_score:4.91, priority_label:"MODERATE"},
+  40: {surq:768.74,et:102.7,bf:0.0,  sed:0.0,  sed_max:0.0,   priority_score:4.91, priority_label:"MODERATE"},
+  41: {surq:512.58,et:55.22,bf:0.0,  sed:27.79,sed_max:51.88, priority_score:7.31, priority_label:"HIGH"},
+  42: {surq:435.53,et:68.83,bf:0.0,  sed:18.07,sed_max:25.65, priority_score:6.05, priority_label:"HIGH"},
+  43: {surq:673.1, et:71.19,bf:1.54, sed:7.05, sed_max:20.71, priority_score:5.95, priority_label:"HIGH"},
+  44: {surq:692.82,et:43.73,bf:0.0,  sed:11.47,sed_max:26.86, priority_score:7.38, priority_label:"HIGH"},
+  45: {surq:576.38,et:80.06,bf:0.0,  sed:9.9,  sed_max:41.09, priority_score:5.65, priority_label:"HIGH"},
+  46: {surq:705.98,et:32.7, bf:0.0,  sed:18.18,sed_max:18.18, priority_score:8.18, priority_label:"CRITICAL"},
+  47: {surq:640.92,et:44.04,bf:0.0,  sed:21.26,sed_max:48.39, priority_score:7.75, priority_label:"CRITICAL"},
+};
+
+const INTERVENTION = {
+  1:"rotational_grazing",2:"forest_restoration",3:"forest_restoration",
+  4:"forest_restoration",5:"rotational_grazing",6:"rotational_grazing",
+  7:"rotational_grazing",8:"forest_restoration",9:"rotational_grazing",
+  10:"rotational_grazing",11:"rotational_grazing",12:"rotational_grazing",
+  13:"forest_restoration",14:"forest_restoration",15:"rotational_grazing",
+  16:"forest_restoration",17:"rotational_grazing",18:"rotational_grazing",
+  19:"forest_restoration",20:"rotational_grazing",21:"rotational_grazing",
+  22:"rotational_grazing",23:"rotational_grazing",24:"rotational_grazing",
+  25:"rotational_grazing",26:"agroforestry",27:"agroforestry",
+  28:"rotational_grazing",29:"rotational_grazing",30:"agroforestry",
+  31:"rotational_grazing",32:"rotational_grazing",33:"agroforestry",
+  34:"agroforestry",35:"rotational_grazing",36:"rotational_grazing",
+  37:"riparian_restoration",38:"agroforestry",39:"riparian_restoration",
+  40:"riparian_restoration",41:"agroforestry",42:"riparian_restoration",
+  43:"riparian_restoration",44:"agroforestry",45:"rotational_grazing",
+  46:"riparian_restoration",47:"riparian_restoration"
+};
+
+const PRIORITY_SUBS = [13,14,16,20,21,31,34,46,47];
+
+const INTERVENTION_COLORS = {
+  forest_restoration:  "#2ecc71",
+  rotational_grazing:  "#f39c12",
+  agroforestry:        "#a78bfa",
+  riparian_restoration:"#60a5fa"
+};
+
+const INTERVENTION_LABELS = {
+  forest_restoration:  "Forest Restoration",
+  rotational_grazing:  "Grass Rehab / Rotational Grazing / Contour Farming",
+  agroforestry:        "Agroforestry",
+  riparian_restoration:"Riparian Restoration"
+};
+
+// ============================================================
+// MAP INIT
+// ============================================================
+const map = L.map('map', { zoomControl: true }).setView([-0.72, 36.42], 10);
+
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 18
+});
+const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '© Esri World Imagery', maxZoom: 18
+});
+osmLayer.addTo(map);
+
+function setBasemap(type) {
+  if (type === 'osm') {
+    map.removeLayer(satLayer); osmLayer.addTo(map);
+    document.getElementById('bm-osm').classList.add('active');
+    document.getElementById('bm-sat').classList.remove('active');
+  } else {
+    map.removeLayer(osmLayer); satLayer.addTo(map);
+    document.getElementById('bm-sat').classList.add('active');
+    document.getElementById('bm-osm').classList.remove('active');
+  }
+}
+
+// ============================================================
+// COLOUR FUNCTIONS
+// ============================================================
+let colourMode = 'intervention';
+
+function getSedimentColor(val) {
+  if (val >= 30) return '#7f0000';
+  if (val >= 20) return '#d73027';
+  if (val >= 15) return '#f46d43';
+  if (val >= 10) return '#fdae61';
+  if (val >= 5)  return '#fee090';
+  return '#e0f3f8';
+}
+function getPriorityColor(score) {
+  if (score >= 8)   return '#7f0000';
+  if (score >= 7)   return '#d73027';
+  if (score >= 6)   return '#f46d43';
+  if (score >= 5)   return '#fdae61';
+  return '#abd9e9';
+}
+function getBaseflowColor(val) {
+  if (val >= 20)  return '#1a9641';
+  if (val >= 10)  return '#a6d96a';
+  if (val >= 5)   return '#ffffbf';
+  if (val >= 2)   return '#fdae61';
+  if (val >= 0.5) return '#d73027';
+  return '#7f0000';
+}
+function getETColor(val) {
+  if (val > 90)   return '#4575b4';
+  if (val >= 60)  return '#1a9641';
+  if (val >= 50)  return '#a6d96a';
+  if (val >= 40)  return '#ffffbf';
+  if (val >= 30)  return '#fdae61';
+  return '#d73027';
+}
+function getRunoffColor(val) {
+  if (val >= 700) return '#7f0000';
+  if (val >= 600) return '#d73027';
+  if (val >= 500) return '#f46d43';
+  if (val >= 400) return '#fdae61';
+  if (val >= 300) return '#fee090';
+  return '#e0f3f8';
+}
+
+function getSubbasinStyle(feature) {
+  const id = feature.properties.Subbasin;
+  const data = SUBBASIN_DATA[id] || {};
+  const interv = INTERVENTION[id] || 'rotational_grazing';
+  const isPriority = PRIORITY_SUBS.includes(id);
+
+  let fillColor;
+  if (colourMode === 'intervention') fillColor = INTERVENTION_COLORS[interv];
+  else if (colourMode === 'sediment') fillColor = getSedimentColor(data.sed || 0);
+  else if (colourMode === 'priority') fillColor = getPriorityColor(data.priority_score || 0);
+  else if (colourMode === 'runoff') fillColor = getRunoffColor(data.surq || 0);
+  else if (colourMode === 'baseflow') fillColor = getBaseflowColor(data.bf || 0);
+  else fillColor = getETColor(data.et || 0);
+
+  return {
+    fillColor: fillColor,
+    fillOpacity: isPriority ? 0.75 : 0.55,
+    color: isPriority ? '#ffffff' : '#333',
+    weight: isPriority ? 2.5 : 1,
+    dashArray: isPriority ? null : '3'
+  };
+}
+
+// ============================================================
+// LAYERS
+// ============================================================
+let subbasinLayer, watershedLayer, hotspotLayer, clusterLayer, priorityLayer;
+
+function buildSubbasinPopup(id) {
+  const d = SUBBASIN_DATA[id] || {};
+  const interv = INTERVENTION[id] || 'rotational_grazing';
+  const tagClass = {
+    forest_restoration:'tag-forest',rotational_grazing:'tag-rangeland',
+    agroforestry:'tag-agro',riparian_restoration:'tag-riparian'
+  }[interv];
+  const isPriority = PRIORITY_SUBS.includes(id);
+  const pLabel = d.priority_label || '';
+  const pColor = {CRITICAL:'#e74c3c',HIGH:'#f39c12',MODERATE:'#3498db',LOW:'#666'}[pLabel] || '#666';
+
+  return `
+    <div style="min-width:220px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#fff">
+        Subbasin ${id}
+        ${isPriority ? '<span style="background:#e74c3c;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">★ PRIORITY</span>' : ''}
+      </div>
+      <span class="intervention-tag ${tagClass}">${INTERVENTION_LABELS[interv]}</span>
+      <span style="background:${pColor}22;color:${pColor};padding:2px 8px;border-radius:10px;font-size:10px;margin-left:4px">${pLabel}</span>
+      <table style="width:100%;margin-top:8px;border-collapse:collapse">
+        <tr style="border-bottom:1px solid #2a2a4a">
+          <td style="color:#888;padding:3px 0;font-size:11px">Priority Score</td>
+          <td style="color:${pColor};font-weight:700;text-align:right">${(d.priority_score||0).toFixed(2)} / 10</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a4a">
+          <td style="color:#888;padding:3px 0;font-size:11px">Sediment Yield (avg)</td>
+          <td style="color:${(d.sed||0)>10?'#e74c3c':'#f39c12'};font-weight:700;text-align:right">${(d.sed||0).toFixed(2)} Mg/ha/yr</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a4a">
+          <td style="color:#888;padding:3px 0;font-size:11px">Sediment Max</td>
+          <td style="color:#aaa;text-align:right">${(d.sed_max||0).toFixed(2)} Mg/ha/yr</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a4a">
+          <td style="color:#888;padding:3px 0;font-size:11px">Surface Runoff</td>
+          <td style="color:#aaa;text-align:right">${(d.surq||0).toFixed(1)} mm/yr</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a4a">
+          <td style="color:#888;padding:3px 0;font-size:11px">ET (% of precip)</td>
+          <td style="color:#aaa;text-align:right">${(d.et||0).toFixed(1)}%</td>
+        </tr>
+        <tr>
+          <td style="color:#888;padding:3px 0;font-size:11px">Baseflow (% of flow)</td>
+          <td style="color:${(d.bf||0)<5?'#e74c3c':'#2ecc71'};font-weight:700;text-align:right">${(d.bf||0).toFixed(1)}%</td>
+        </tr>
+      </table>
+    </div>`;
+}
+
+function updateSidebar(id) {
+  const d = SUBBASIN_DATA[id] || {};
+  const interv = INTERVENTION[id] || 'rotational_grazing';
+  const pLabel = d.priority_label || 'MODERATE';
+  const pColor = {CRITICAL:'#e74c3c',HIGH:'#f39c12',MODERATE:'#3498db',LOW:'#666'}[pLabel] || '#666';
+
+  document.getElementById('info-content').innerHTML = `
+    <div style="font-weight:700;font-size:13px;color:#fff;margin-bottom:8px">
+      Subbasin ${id}
+      <span style="background:${pColor};color:#fff;padding:2px 6px;border-radius:8px;font-size:10px;margin-left:6px">${pLabel}</span>
+    </div>
+    <div class="info-row"><span class="info-label">Intervention</span><span class="info-value">${INTERVENTION_LABELS[interv]}</span></div>
+    <div class="info-row"><span class="info-label">Priority Score</span><span class="info-value" style="color:${pColor}">${(d.priority_score||0).toFixed(2)}/10</span></div>
+    <div class="info-row"><span class="info-label">Sediment avg</span><span class="info-value ${(d.sed||0)>10?'danger':'warn'}">${(d.sed||0).toFixed(2)} Mg/ha/yr</span></div>
+    <div class="info-row"><span class="info-label">Sediment max</span><span class="info-value">${(d.sed_max||0).toFixed(2)} Mg/ha/yr</span></div>
+    <div class="info-row"><span class="info-label">Surface runoff</span><span class="info-value warn">${(d.surq||0).toFixed(1)} mm/yr</span></div>
+    <div class="info-row"><span class="info-label">ET % precip</span><span class="info-value">${(d.et||0).toFixed(1)}%</span></div>
+    <div class="info-row"><span class="info-label">Baseflow %</span><span class="info-value ${(d.bf||0)<5?'danger':'good'}">${(d.bf||0).toFixed(1)}%</span></div>
+  `;
+}
+
+function onEachSubbasin(feature, layer) {
+  const id = feature.properties.Subbasin;
+  layer.bindPopup(buildSubbasinPopup(id), {maxWidth:280});
+  layer.on('click', () => updateSidebar(id));
+  layer.on('mouseover', function() {
+    this.setStyle({fillOpacity:0.9, weight:3, color:'#fff'});
+  });
+  layer.on('mouseout', function() {
+    subbasinLayer.resetStyle(this);
+  });
+}
+
+// GeoJSON loaded from data.js (loaded via <script> tag in <head>)
+(function() {
+  const [subData, wshedData, hotspotData, clusterData] = [SUB_GEOJSON, WS_GEOJSON, HS_GEOJSON, CL_GEOJSON];
+  (([subData, wshedData, hotspotData, clusterData]) => {
+
+  if (subData) {
+    subbasinLayer = L.geoJSON(subData, {
+      style: getSubbasinStyle,
+      onEachFeature: onEachSubbasin
+    }).addTo(map);
+
+    // Add subbasin number labels
+    subData.features.forEach(f => {
+      const id = f.properties.Subbasin;
+      if (!id) return;
+      const coords = f.geometry.coordinates;
+      // Simple centroid approximation
+      let lats=[], lngs=[];
+      const flatten = (c) => {
+        if (typeof c[0] === 'number') { lngs.push(c[0]); lats.push(c[1]); }
+        else c.forEach(flatten);
+      };
+      flatten(coords);
+      const lat = lats.reduce((a,b)=>a+b,0)/lats.length;
+      const lng = lngs.reduce((a,b)=>a+b,0)/lngs.length;
+      const isPriority = PRIORITY_SUBS.includes(id);
+      L.marker([lat,lng], {
+        icon: L.divIcon({
+          className:'',
+          html:`<div style="font-size:${isPriority?'12px':'10px'};font-weight:${isPriority?'900':'600'};color:${isPriority?'#fff':'#ffffffbb'};text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none">${id}${isPriority?'★':''}</div>`,
+          iconAnchor:[8,8]
+        })
+      }).addTo(map);
+    });
+
+    map.fitBounds(subbasinLayer.getBounds(), {padding:[20,20]});
+    setTimeout(() => { map.invalidateSize(); }, 300);
+  }
+
+  if (wshedData) {
+    watershedLayer = L.geoJSON(wshedData, {
+      style: {color:'#ffffff', weight:2.5, fillOpacity:0, dashArray:'6 4'}
+    }).addTo(map);
+  }
+
+  if (hotspotData) {
+    hotspotLayer = L.geoJSON(hotspotData, {
+      style: {color:'#f39c12', weight:1.5, fillColor:'#f39c12', fillOpacity:0.3}
+    }); // not added by default — toggle
+  }
+
+  if (clusterData) {
+    clusterLayer = L.geoJSON(clusterData, {
+      style: {color:'#60a5fa', weight:2, fillColor:'#60a5fa', fillOpacity:0.12, dashArray:'8 4'}
+    }); // not added by default — toggle
+  }
+
+  updateLegend();
+});
+
+// ============================================================
+// LAYER TOGGLES
+// ============================================================
+document.getElementById('toggle-subbasins').addEventListener('change', function() {
+  if (this.checked) subbasinLayer && map.addLayer(subbasinLayer);
+  else subbasinLayer && map.removeLayer(subbasinLayer);
+});
+document.getElementById('toggle-priority').addEventListener('change', function() {
+  // Re-style subbasins to show/hide priority highlighting
+  if (subbasinLayer) {
+    subbasinLayer.eachLayer(l => {
+      const id = l.feature.properties.Subbasin;
+      const isPriority = PRIORITY_SUBS.includes(id);
+      if (isPriority) {
+        l.setStyle(this.checked
+          ? {color:'#ffffff', weight:2.5, fillOpacity:0.75}
+          : {color:'#333', weight:1, dashArray:'3', fillOpacity:0.55}
+        );
+      }
+    });
+  }
+});
+document.getElementById('toggle-watershed').addEventListener('change', function() {
+  if (this.checked) watershedLayer && map.addLayer(watershedLayer);
+  else watershedLayer && map.removeLayer(watershedLayer);
+});
+document.getElementById('toggle-hotspots').addEventListener('change', function() {
+  if (this.checked) hotspotLayer && map.addLayer(hotspotLayer);
+  else hotspotLayer && map.removeLayer(hotspotLayer);
+});
+document.getElementById('toggle-cluster').addEventListener('change', function() {
+  if (this.checked) clusterLayer && map.addLayer(clusterLayer);
+  else clusterLayer && map.removeLayer(clusterLayer);
+});
+
+// ============================================================
+// COLOUR MODE
+// ============================================================
+document.querySelectorAll('input[name="colourmode"]').forEach(r => {
+  r.addEventListener('change', function() {
+    colourMode = this.value;
+    if (subbasinLayer) subbasinLayer.setStyle(getSubbasinStyle);
+    updateLegend();
+  });
+});
+
+function updateLegend() {
+  const el = document.getElementById('legend-content');
+  if (colourMode === 'intervention') {
+    el.innerHTML = Object.entries(INTERVENTION_COLORS).map(([k,c]) => `
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:${c}"></span>
+        ${INTERVENTION_LABELS[k]}
+      </div>`).join('') + `
+      <div class="legend-item" style="margin-top:6px">
+        <span class="legend-swatch" style="background:transparent;border:2px solid #fff"></span>
+        ★ Priority subbasins (thicker border)
+      </div>`;
+  } else if (colourMode === 'sediment') {
+    el.innerHTML = [
+      ['#7f0000','≥ 30 Mg/ha/yr'],['#d73027','20–30'],
+      ['#f46d43','15–20'],['#fdae61','10–15'],
+      ['#fee090','5–10'],['#e0f3f8','< 5 (healthy)']
+    ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
+  } else if (colourMode === 'priority') {
+    el.innerHTML = [
+      ['#7f0000','Score ≥ 8 (Critical)'],['#d73027','Score 7–8'],
+      ['#f46d43','Score 6–7'],['#fdae61','Score 5–6'],['#abd9e9','Score < 5']
+    ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
+  } else if (colourMode === 'runoff') {
+    el.innerHTML = [
+      ['#7f0000','≥ 700 mm/yr (extreme)'],['#d73027','600–700'],
+      ['#f46d43','500–600'],['#fdae61','400–500'],
+      ['#fee090','300–400'],['#e0f3f8','< 300']
+    ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
+  } else if (colourMode === 'baseflow') {
+    el.innerHTML = `<div style="font-size:10px;color:#888;margin-bottom:4px">Healthy target: 50–60% of streamflow</div>` + [
+      ['#1a9641','≥ 20% (good)'],['#a6d96a','10–20%'],
+      ['#ffffbf','5–10%'],['#fdae61','2–5% (degraded)'],
+      ['#d73027','0.5–2% (critical)'],['#7f0000','< 0.5% (severe)']
+    ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
+  } else {
+    el.innerHTML = `<div style="font-size:10px;color:#888;margin-bottom:4px">Healthy target: 60–70% of precip</div>` + [
+      ['#4575b4','> 90% (anomalous / lake)'],['#1a9641','60–90% (healthy)'],
+      ['#a6d96a','50–60%'],['#ffffbf','40–50%'],
+      ['#fdae61','30–40% (degraded)'],['#d73027','< 30% (bare/eroded)']
+    ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
+  }
+}
+window.addEventListener('load', function() {
+  setTimeout(() => { map.invalidateSize(); }, 100);
+});
+window.addEventListener('resize', function() {
+  map.invalidateSize();
+});
+</script>
+</body>
+</html>
