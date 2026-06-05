@@ -8,7 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; height: 100vh; display: flex; flex-direction: column; }
+  html, body { height: 100%; width: 100%; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
   #header {
     background: linear-gradient(135deg, #0d3b2e 0%, #1a5c42 100%);
@@ -24,9 +25,9 @@
     border-radius: 12px; font-size: 11px; font-weight: 700;
   }
 
-  #main { display: flex; flex: 1; overflow: hidden; }
+  #main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
-  #map { flex: 1; }
+  #map { flex: 1; min-height: 0; width: 100%; position: relative; }
 
   #sidebar {
     width: 300px; background: #12122a; overflow-y: auto;
@@ -587,6 +588,7 @@ const CL_GEOJSON  = {"type":"FeatureCollection","name":"grv_cluster","crs":{"typ
     });
 
     map.fitBounds(subbasinLayer.getBounds(), {padding:[20,20]});
+    setTimeout(() => { map.invalidateSize(); }, 300);
   }
 
   if (wshedData) {
@@ -699,6 +701,12 @@ function updateLegend() {
     ].map(([c,l])=>`<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('');
   }
 }
+window.addEventListener('load', function() {
+  setTimeout(() => { map.invalidateSize(); }, 100);
+});
+window.addEventListener('resize', function() {
+  map.invalidateSize();
+});
 </script>
 </body>
 </html>
